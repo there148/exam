@@ -1,0 +1,202 @@
+Model.dart:
+
+class User{
+  final int id;
+  final String name;
+  final String email;
+
+  User({required this.id,required this.name,required this.email});
+
+  factory User.fromJson(Map<String,dynamic>json){
+    return User(
+      id:json['id'],
+      name:json['name'],
+      email:json['email'],
+    );
+  }
+  Map<String,dynamic>toJson(){
+    return{
+      'name':name,
+      'email':email,
+    };
+  }
+}
+
+
+api service.dart:
+
+import 'dart:convert';
+
+import 'model.dart';
+import 'userScreen.dart';
+import 'package:http/http.dart' as http;
+class ApiService{
+  static const String baseUrl='';
+
+  static Future<List<User>>fetchUser()async{
+    final response=await http.get(Uri.parse(baseUrl));
+    if(response.statusCode==200){
+      List<dynamic>data=json.decode(response.body);
+      return data.map((json)=>User.fromJson(json)).toList();
+    }else{
+      throw Exception('Faild to load');
+    }
+  }
+
+  static Future<void>addUser(User user)async{
+    final Response=await http.post(
+      Uri.parse(baseUrl),
+      headers: {'Content-Type':'application/json'},
+      body: json.encode(user.toJson()),
+    );
+    if(Response.statusCode!=201){
+      throw Exception('Faild to add User');
+    }
+  }
+
+  static Future<void>updateUser(int id,User user)async{
+    final Response=await http.post(
+      Uri.parse('$baseUrl/$id'),
+      headers: {'Content-Type':'application/json'},
+      body: json.encode(user.toJson()),
+    );
+    if(Response.statusCode!=200){
+      throw Exception('Faild to updated User');
+    }
+  }
+  static Future<void>delteUser(int id)async{
+    final Response=await http.post(Uri.parse('$baseUrl/$id'));
+    if(Response.statusCode!=204){
+      throw Exception('Faild to deleted User');
+    }
+  }
+}
+
+
+UserScreen.dart:
+
+import 'package:flutter/material.dart';
+import 'model.dart';
+import 'api_service.dart';
+
+class UserScreen extends StatefulWidget {
+  @override
+  _UserScreenState createState() => _UserScreenState();
+}
+
+class _UserScreenState extends State<UserScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  int? _editingUserId;
+
+  List<User> _users = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
+
+  Future<void> _loadUsers() async {
+    final users = await ApiService.fetchUser();
+    setState(() {
+      _users = users;
+    });
+  }
+
+  Future<void> _saveUser() async {
+    if (_formKey.currentState!.validate()) {
+      final user = User(
+        id: _editingUserId??0,
+        name: _nameController.text,
+        email: _emailController.text,
+      );
+      if (_editingUserId == null) {
+        await ApiService.addUser(user);
+      } else {
+        await ApiService.updateUser(_editingUserId!, user);
+      }
+      _clearForm();
+      _loadUsers();
+    }
+  }
+
+  Future<void> _deleteUser(int id) async {
+    await ApiService.delteUser(id);
+    _loadUsers();
+  }
+
+  void _clearForm() {
+    _nameController.clear();
+    _emailController.clear();
+    _editingUserId = null;
+  }
+
+  void _editUser(User user) {
+    _nameController.text = user.name;
+    _emailController.text = user.email;
+    _editingUserId = user.id;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('User Management')),
+      body: Column(
+        children: [
+          Form(
+            key: _formKey,
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(labelText: 'Name'),
+                    validator: (value) => value!.isEmpty ? 'Enter name' : null,
+                  ),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: InputDecoration(labelText: 'Email'),
+                    validator: (value) => value!.isEmpty ? 'Enter email' : null,
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: _saveUser,
+                    child: Text(_editingUserId == null ? 'Add User' : 'Update User'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _users.length,
+              itemBuilder: (context, index) {
+                final user = _users[index];
+                return ListTile(
+                  title: Text(user.name),
+                  subtitle: Text(user.email),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.edit),
+                        onPressed: () => _editUser(user),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete),
+                        onPressed: () => _deleteUser(user.id!),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
